@@ -7,7 +7,7 @@
  * same code path, so "works locally, 500s on Vercel" can't happen.
  */
 
-import { fetchHot, searchSubreddits, isAuthenticated, RedditError } from './reddit';
+import { fetchHot, searchSubreddits, isAuthenticated, RedditError } from './reddit.js';
 
 export interface RouteResult {
   status: number;

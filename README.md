@@ -195,6 +195,12 @@ scripts/verify.mjs    Self-check over the real modules
 
 ## Notes on robustness
 
+- Relative imports inside `api/` carry explicit `.js` extensions. This package is
+  `"type": "module"`, so Vercel compiles the functions as ESM, and ESM does not
+  resolve extensionless relative specifiers — omitting them builds cleanly and
+  then fails at runtime with `FUNCTION_INVOCATION_FAILED`. `npm run verify`
+  checks this statically, because it is invisible until deploy.
+
 - Subreddit names are validated against `^[A-Za-z0-9_]{2,21}$` before being placed
   in a URL path, so input like `../../api/v1/me` can't steer the request at other
   Reddit endpoints using our credentials.

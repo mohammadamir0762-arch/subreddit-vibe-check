@@ -9,6 +9,8 @@
  *   2. Reddit credentials — a live call, skipped if .env is not configured.
  */
 
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { createServer, loadEnv } from 'vite';
 
 const C = { green: '\x1b[32m', red: '\x1b[31m', yellow: '\x1b[33m', dim: '\x1b[2m', off: '\x1b[0m' };
@@ -112,6 +114,26 @@ async function main() {
     check('word drivers extracted',
       analysis.drivers.positive.length > 0 && analysis.drivers.negative.length > 0,
       `+${analysis.drivers.positive.length} / -${analysis.drivers.negative.length}`);
+
+    // Guard against a bug that builds cleanly and only fails once deployed. This
+    // package is "type": "module", so Vercel compiles api/ as ESM — and ESM does
+    // not resolve extensionless relative specifiers. Omitting an extension throws
+    // ERR_MODULE_NOT_FOUND at runtime, surfacing as FUNCTION_INVOCATION_FAILED.
+    console.log('\nServerless bundle');
+    const offenders = [];
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) { walk(full); continue; }
+        if (!full.endsWith('.ts')) continue;
+        for (const [, spec] of readFileSync(full, 'utf8').matchAll(/from\s+'(\.[^']*)'/g)) {
+          if (!/\.(js|ts|json)$/.test(spec)) offenders.push(`${full} -> ${spec}`);
+        }
+      }
+    };
+    walk('api');
+    check('api/ relative imports carry explicit extensions', offenders.length === 0,
+      offenders.length ? offenders.join('; ') : 'ESM-resolvable');
 
     console.log('\nReddit API');
     const env = loadEnv('development', process.cwd(), '');

@@ -10,9 +10,14 @@ import type { RouteResult } from '../api/_lib/handlers.ts';
  * is a complete local setup, running the identical code path production runs.
  *
  * Handlers are pulled in through `ssrLoadModule` at request time rather than as a
- * static import. That keeps the Vercel-bound files in `api/` out of the Vite config's
- * module graph — so they can keep the extensionless imports Vercel's bundler expects —
- * and it re-evaluates them on every request, so editing a route hot-reloads.
+ * static import, which keeps the Vercel-bound files in `api/` out of the Vite config's
+ * module graph and re-evaluates them on every request, so editing a route hot-reloads.
+ *
+ * Note the `.js` extensions on relative imports inside `api/`. This package is
+ * `"type": "module"`, so Vercel compiles those functions as ESM — and ESM does not
+ * resolve extensionless relative specifiers. Omitting them builds cleanly and then
+ * fails at runtime with FUNCTION_INVOCATION_FAILED. TypeScript maps the `.js`
+ * specifier back to the `.ts` source.
  */
 
 type RouteName = 'hotRoute' | 'searchRoute';
