@@ -1,7 +1,9 @@
 import type { Analysis, WordDriver } from '../lib/analysis';
 import { signed } from '../lib/format';
 import { useMeasure } from '../lib/useMeasure';
-import { ChartFrame, LABEL_COLOR, MiniTable, TableFallback, useChartTooltip } from './primitives';
+import { ChartFrame, MiniTable, TableFallback } from './primitives';
+import { LABEL_COLOR } from '../lib/labels';
+import { useChartTooltip } from '../lib/useChartTooltip';
 
 const ROW = 22;
 const BAR = 14;

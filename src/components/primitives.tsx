@@ -1,17 +1,7 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { Label } from '../lib/sentiment';
-
-export const LABEL_COLOR: Record<Label, string> = {
-  positive: 'var(--positive)',
-  neutral: 'var(--neutral)',
-  negative: 'var(--negative)',
-};
-
-export const LABEL_TEXT: Record<Label, string> = {
-  positive: 'Positive',
-  neutral: 'Neutral',
-  negative: 'Negative',
-};
+import { LABEL_COLOR } from '../lib/labels';
+import type { TooltipState } from '../lib/useChartTooltip';
 
 export function Card({
   title,
@@ -85,27 +75,6 @@ export function Pill({
       {children}
     </span>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Tooltips
-// ---------------------------------------------------------------------------
-
-export interface TooltipState {
-  x: number;
-  y: number;
-  content: ReactNode;
-}
-
-/** Hover state for a hand-rolled SVG chart. Coordinates are relative to the
- *  chart's positioned wrapper, so the tooltip follows the mark without layout math. */
-export function useChartTooltip() {
-  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const hide = useCallback(() => setTooltip(null), []);
-  const show = useCallback((x: number, y: number, content: ReactNode) => {
-    setTooltip({ x, y, content });
-  }, []);
-  return { tooltip, show, hide };
 }
 
 export function ChartTooltip({ tooltip }: { tooltip: TooltipState | null }) {

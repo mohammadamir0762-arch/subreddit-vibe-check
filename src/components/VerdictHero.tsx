@@ -1,6 +1,6 @@
 import type { Analysis } from '../lib/analysis';
 import { compact, signed } from '../lib/format';
-import { LABEL_COLOR } from './primitives';
+import { LABEL_COLOR } from '../lib/labels';
 
 /**
  * The dashboard's single hero figure — the mean title sentiment, with the

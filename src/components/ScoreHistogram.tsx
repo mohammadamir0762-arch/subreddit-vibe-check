@@ -1,6 +1,8 @@
 import type { Analysis } from '../lib/analysis';
 import { useMeasure } from '../lib/useMeasure';
-import { ChartFrame, LABEL_COLOR, LABEL_TEXT, MiniTable, TableFallback, useChartTooltip } from './primitives';
+import { ChartFrame, MiniTable, TableFallback } from './primitives';
+import { LABEL_COLOR, LABEL_TEXT } from '../lib/labels';
+import { useChartTooltip } from '../lib/useChartTooltip';
 
 const HEIGHT = 200;
 const PAD = { top: 18, right: 8, bottom: 30, left: 30 };

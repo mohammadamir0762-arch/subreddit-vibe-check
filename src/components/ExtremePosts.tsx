@@ -1,6 +1,6 @@
 import type { AnalyzedPost } from '../lib/analysis';
 import { compact, signed } from '../lib/format';
-import { LABEL_COLOR } from './primitives';
+import { LABEL_COLOR } from '../lib/labels';
 
 function Column({
   heading, posts, color, empty,

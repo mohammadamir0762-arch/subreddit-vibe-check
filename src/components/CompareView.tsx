@@ -1,6 +1,7 @@
 import type { Analysis } from '../lib/analysis';
 import { percent, signed } from '../lib/format';
-import { LABEL_COLOR, LABEL_TEXT, Legend } from './primitives';
+import { Legend } from './primitives';
+import { LABEL_COLOR, LABEL_TEXT } from '../lib/labels';
 
 export interface ComparisonSide {
   subreddit: string;

@@ -1,5 +1,3 @@
-import { Card } from './primitives';
-
 /** Layout-matched skeleton, so the page doesn't jump when data lands. */
 export function LoadingState() {
   return (
@@ -20,23 +18,25 @@ export function LoadingState() {
 
 export function ErrorState({ message, hint, onRetry }: { message: string; hint?: string; onRetry?: () => void }) {
   return (
-    <Card className="animate-rise border-l-4" >
-      <div style={{ borderColor: 'var(--negative)' }}>
-        <h2 className="text-sm font-semibold" style={{ color: 'var(--negative)' }}>
-          {message}
-        </h2>
-        {hint && <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{hint}</p>}
-        {onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="mt-3 rounded-lg border border-edge px-3 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:text-ink"
-          >
-            Try again
-          </button>
-        )}
-      </div>
-    </Card>
+    <section
+      role="alert"
+      className="animate-rise rounded-xl border border-edge bg-surface p-5 shadow-[var(--shadow-card)]"
+      style={{ borderLeftWidth: 3, borderLeftColor: 'var(--negative)' }}
+    >
+      <h2 className="text-sm font-semibold" style={{ color: 'var(--negative)' }}>
+        {message}
+      </h2>
+      {hint && <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{hint}</p>}
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 rounded-lg border border-edge px-3 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:text-ink"
+        >
+          Try again
+        </button>
+      )}
+    </section>
   );
 }
 

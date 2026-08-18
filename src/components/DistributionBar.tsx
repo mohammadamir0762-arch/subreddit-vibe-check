@@ -1,7 +1,8 @@
 import type { Analysis } from '../lib/analysis';
 import type { Label } from '../lib/sentiment';
 import { percent } from '../lib/format';
-import { Legend, LABEL_COLOR, LABEL_TEXT, MiniTable, TableFallback } from './primitives';
+import { Legend, MiniTable, TableFallback } from './primitives';
+import { LABEL_COLOR, LABEL_TEXT } from '../lib/labels';
 
 const ORDER: Label[] = ['positive', 'neutral', 'negative'];
 

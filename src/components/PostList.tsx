@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { AnalyzedPost } from '../lib/analysis';
 import type { Label } from '../lib/sentiment';
 import { compact, relativeTime, signed } from '../lib/format';
-import { LABEL_COLOR, LABEL_TEXT } from './primitives';
+import { LABEL_COLOR, LABEL_TEXT } from '../lib/labels';
 
 /** Small inline meter showing where one title falls on [-1, +1]. */
 function ScoreMeter({ score, label }: { score: number; label: Label }) {

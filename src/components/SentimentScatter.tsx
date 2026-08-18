@@ -1,7 +1,9 @@
 import type { Analysis } from '../lib/analysis';
 import { compact, describeCorrelation, signed } from '../lib/format';
 import { useMeasure } from '../lib/useMeasure';
-import { ChartFrame, LABEL_COLOR, LABEL_TEXT, Legend, MiniTable, TableFallback, useChartTooltip } from './primitives';
+import { ChartFrame, Legend, MiniTable, TableFallback } from './primitives';
+import { LABEL_COLOR, LABEL_TEXT } from '../lib/labels';
+import { useChartTooltip } from '../lib/useChartTooltip';
 
 const HEIGHT = 260;
 const PAD = { top: 16, right: 12, bottom: 34, left: 44 };
@@ -125,7 +127,7 @@ export function SentimentScatter({ analysis }: { analysis: Analysis }) {
         <MiniTable
           head={['Title', 'Score', 'Upvotes']}
           rows={analysis.posts.map((post) => [
-            <span className="line-clamp-1 max-w-[24rem]">{post.title}</span>,
+            <span key={post.id} className="line-clamp-1 max-w-[24rem]">{post.title}</span>,
             signed(post.sentiment.score),
             compact(post.score),
           ])}
