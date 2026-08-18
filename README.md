@@ -68,7 +68,9 @@ confusing 403 about the subreddit.
 
 1. Sign in to Reddit and open <https://www.reddit.com/prefs/apps>.
 2. **Create another app…** and fill in:
-   - **name:** `subreddit-vibe-check`
+   - **name:** `vibe-check-dashboard` — note that Reddit rejects any OAuth app
+     name containing the string "reddit", so `subreddit-vibe-check` will not be
+     accepted. The name is only a label and need not match anything in the code.
    - **type:** **script**
    - **redirect uri:** `http://localhost:5173`
 3. The **client ID** is the short string directly beneath the app name (not the
