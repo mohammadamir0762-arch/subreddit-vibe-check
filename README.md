@@ -5,7 +5,7 @@ sentiment **in the browser**, then breaks the result down: an overall verdict, h
 the scores are distributed, which words are responsible, and whether the mood
 actually tracks with upvotes.
 
-**Live:** _add your Vercel URL here_
+**Live:** <https://subreddit-vibe-check-mu.vercel.app>
 
 ---
 
