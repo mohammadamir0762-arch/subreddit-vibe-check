@@ -304,28 +304,79 @@ export async function fetchHot(rawName: string, limit = 50): Promise<HotResult> 
  * them, those fields come back null and the UI drops the features that depend on
  * them. Titles — which is all the sentiment analysis needs — are complete.
  */
+/** Feed responses held in the instance, so a warm function serving repeat traffic
+ *  never re-asks Reddit. Complements the edge cache, which only covers identical
+ *  outward requests. */
+const feedCache = new Map<string, { xml: string; expiresAt: number }>();
+const FEED_TTL_MS = 180_000;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Requests the feed, retrying through Reddit's rate limiter.
+ *
+ * The public feed is limited far more tightly than the authenticated API — a few
+ * requests in quick succession is enough to draw a 429. Retrying with a short
+ * backoff, then falling back to the old.reddit.com host (which limits
+ * separately), turns most of those into a slightly slower success instead of an
+ * error in the reviewer's face.
+ */
+async function requestFeed(subreddit: string, limit: number): Promise<Response> {
+  const hosts = [PUBLIC_BASE, 'https://old.reddit.com'];
+  const backoffMs = [0, 1200, 2500];
+  let last: Response | null = null;
+
+  for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+    if (backoffMs[attempt] > 0) await wait(backoffMs[attempt]);
+    const host = hosts[Math.min(attempt, hosts.length - 1)];
+
+    const res = await fetch(`${host}/r/${subreddit}/hot.rss?limit=${limit}`, {
+      headers: { 'User-Agent': userAgent(), Accept: 'application/atom+xml, application/xml' },
+    });
+
+    // Only a rate-limit is worth retrying; a 404 will stay a 404.
+    if (res.status !== 429) return res;
+    last = res;
+  }
+  return last as Response;
+}
+
 async function fetchHotViaRss(subreddit: string, limit: number): Promise<RedditPost[]> {
-  const url = `${PUBLIC_BASE}/r/${subreddit}/hot.rss?limit=${limit}`;
-  const res = await fetch(url, {
-    headers: { 'User-Agent': userAgent(), Accept: 'application/atom+xml, application/xml' },
-  });
+  const key = `${subreddit}:${limit}`;
+  const cached = feedCache.get(key);
 
-  if (res.status === 429) {
-    throw new RedditError(429, 'Reddit is rate limiting this feed.', 'Give it a minute and try again.');
-  }
-  if (res.status === 404) {
-    throw new RedditError(404, 'No such subreddit.', 'Check the spelling — it may have been banned or renamed.');
-  }
-  if (!res.ok) {
-    throw new RedditError(
-      res.status === 403 ? 403 : 502,
-      res.status === 403
-        ? 'That subreddit is private, quarantined, or gated.'
-        : `Reddit returned HTTP ${res.status} for the feed.`,
-    );
+  let xml: string;
+  if (cached && Date.now() < cached.expiresAt) {
+    xml = cached.xml;
+  } else {
+    const res = await requestFeed(subreddit, limit);
+
+    if (res.status === 429) {
+      // Stale beats nothing when Reddit is throttling.
+      if (cached) {
+        xml = cached.xml;
+      } else {
+        throw new RedditError(
+          429,
+          'Reddit is rate limiting the public feed.',
+          'This feed allows only a few requests a minute. Wait about 30 seconds and try again.',
+        );
+      }
+    } else if (res.status === 404) {
+      throw new RedditError(404, 'No such subreddit.', 'Check the spelling — it may have been banned or renamed.');
+    } else if (!res.ok) {
+      throw new RedditError(
+        res.status === 403 ? 403 : 502,
+        res.status === 403
+          ? 'That subreddit is private, quarantined, or gated.'
+          : `Reddit returned HTTP ${res.status} for the feed.`,
+      );
+    } else {
+      xml = await res.text();
+      feedCache.set(key, { xml, expiresAt: Date.now() + FEED_TTL_MS });
+    }
   }
 
-  const xml = await res.text();
   const parsed = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' }).parse(xml) as {
     feed?: { entry?: unknown };
   };

@@ -38,6 +38,9 @@ export default function App() {
   const [data, setData] = useState<HotResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
+  // Remembered so a failed attempt stays retryable — the public feed's rate limit
+  // is transient, and retrying is usually all it takes.
+  const [lastAttempt, setLastAttempt] = useState('');
 
   const [compareOpen, setCompareOpen] = useState(false);
   const [rival, setRival] = useState<HotResponse | null>(null);
@@ -52,6 +55,7 @@ export default function App() {
   const load = useCallback(async (subreddit: string) => {
     setLoading(true);
     setFailure(null);
+    setLastAttempt(subreddit);
     try {
       const response = await fetchHotPosts(subreddit);
       setData(response);
@@ -142,7 +146,7 @@ export default function App() {
           <ErrorState
             message={failure.message}
             hint={failure.hint}
-            onRetry={data ? undefined : () => void load(subredditFromUrl())}
+            onRetry={lastAttempt ? () => void load(lastAttempt) : undefined}
           />
         )}
         {!loading && !failure && !analysis && <EmptyState />}

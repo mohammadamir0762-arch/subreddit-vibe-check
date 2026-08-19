@@ -16,7 +16,6 @@ import { createServer, loadEnv } from 'vite';
 const C = { green: '\x1b[32m', red: '\x1b[31m', yellow: '\x1b[33m', dim: '\x1b[2m', off: '\x1b[0m' };
 const PASS = `${C.green}PASS${C.off}`;
 const FAIL = `${C.red}FAIL${C.off}`;
-const SKIP = `${C.yellow}SKIP${C.off}`;
 
 let failures = 0;
 
