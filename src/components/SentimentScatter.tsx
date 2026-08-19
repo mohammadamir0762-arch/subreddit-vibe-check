@@ -23,8 +23,18 @@ export function SentimentScatter({ analysis }: { analysis: Analysis }) {
   const plotWidth = Math.max(0, width - PAD.left - PAD.right);
   const plotHeight = HEIGHT - PAD.top - PAD.bottom;
 
+  // Guard: this chart is meaningless without vote counts. App hides it in that
+  // case, but a bare render should degrade rather than plot everything at zero.
+  if (!analysis.hasScores || analysis.correlation === null) {
+    return (
+      <p className="py-6 text-center text-sm text-ink-3">
+        Vote counts aren't available from this data source, so there's nothing to correlate against.
+      </p>
+    );
+  }
+
   // log1p keeps zero-score posts on the chart instead of at negative infinity.
-  const logScores = analysis.posts.map((p) => Math.log10(p.score + 1));
+  const logScores = analysis.posts.map((p) => Math.log10((p.score ?? 0) + 1));
   const maxLog = Math.max(1, ...logScores);
 
   const xFor = (score: number) => PAD.left + ((score + 1) / 2) * plotWidth;
@@ -76,7 +86,7 @@ export function SentimentScatter({ analysis }: { analysis: Analysis }) {
                         <>
                           <div className="line-clamp-3 font-medium">{post.title}</div>
                           <div className="tnum mt-1 text-ink-3">
-                            {signed(post.sentiment.score)} · {compact(post.score)} upvotes
+                            {signed(post.sentiment.score)} · {compact(post.score ?? 0)} upvotes
                           </div>
                         </>
                       ))
@@ -129,7 +139,7 @@ export function SentimentScatter({ analysis }: { analysis: Analysis }) {
           rows={analysis.posts.map((post) => [
             <span key={post.id} className="line-clamp-1 max-w-[24rem]">{post.title}</span>,
             signed(post.sentiment.score),
-            compact(post.score),
+            compact(post.score ?? 0),
           ])}
         />
       </TableFallback>

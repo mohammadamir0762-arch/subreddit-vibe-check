@@ -127,10 +127,13 @@ export default function App() {
       <main className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6 sm:py-8">
         <SubredditSearch onSubmit={load} loading={loading} initial={subredditFromUrl()} />
 
-        {data && !data.authenticated && (
-          <p className="rounded-lg border border-edge bg-sunken px-3 py-2 text-xs text-ink-2">
-            Served without Reddit API credentials. Reddit blocks most anonymous server traffic, so
-            set <code className="text-ink">REDDIT_CLIENT_ID</code> for this to stay reliable.
+        {data?.source === 'rss' && (
+          <p className="rounded-lg border border-edge bg-sunken px-3 py-2 text-xs leading-relaxed text-ink-2">
+            <span className="font-medium text-ink">Live data via Reddit's public Atom feed.</span>{' '}
+            Reddit blocks anonymous access to its JSON API, so these 50 posts come from{' '}
+            <code className="text-ink">/r/{data.subreddit}/hot.rss</code> — the same Hot ranking, in the
+            same order. That feed omits vote and comment counts, so the sentiment-vs-upvotes comparison
+            is hidden rather than filled with invented numbers. Adding API credentials restores it.
           </p>
         )}
 
@@ -166,7 +169,7 @@ export default function App() {
               </Card>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className={`grid gap-4 ${analysis.hasScores ? 'lg:grid-cols-2' : ''}`}>
               <Card
                 title="What's driving the score"
                 subtitle="Ranked by total impact — a word's weight times how often it appears."
@@ -174,12 +177,14 @@ export default function App() {
                 <WordDrivers analysis={analysis} />
               </Card>
 
-              <Card
-                title="Does mood track with upvotes?"
-                subtitle="Each dot is one post. Upvotes use a log scale to keep outliers from flattening the rest."
-              >
-                <SentimentScatter analysis={analysis} />
-              </Card>
+              {analysis.hasScores && (
+                <Card
+                  title="Does mood track with upvotes?"
+                  subtitle="Each dot is one post. Upvotes use a log scale to keep outliers from flattening the rest."
+                >
+                  <SentimentScatter analysis={analysis} />
+                </Card>
+              )}
             </div>
 
             <Card title="The extremes">
@@ -236,7 +241,7 @@ export default function App() {
                 </div>
               }
             >
-              <PostList posts={analysis.posts} />
+              <PostList posts={analysis.posts} hasScores={analysis.hasScores} />
             </Card>
           </div>
         )}
@@ -245,7 +250,8 @@ export default function App() {
           <p>
             <span className="font-medium text-ink-2">Method.</span> Titles are fetched through a
             server-side proxy (Reddit sends no CORS headers and requires a custom User-Agent that
-            browsers are forbidden from setting), then scored entirely client-side with{' '}
+            browsers are forbidden from setting) — via the JSON API when credentials are configured,
+            otherwise the public Atom feed — then scored entirely client-side with{' '}
             <span className="text-ink-2">{ENGINE_META[engine].name}</span> — {ENGINE_META[engine].blurb}
           </p>
           <p className="mt-2">

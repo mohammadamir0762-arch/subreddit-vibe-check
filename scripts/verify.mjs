@@ -141,22 +141,44 @@ async function main() {
       if (env[key]) process.env[key] = env[key];
     }
 
-    if (!process.env.REDDIT_CLIENT_ID) {
-      console.log(`  ${SKIP}  live fetch ${C.dim}(no REDDIT_CLIENT_ID in .env - see README step 1)${C.off}`);
-    } else {
-      const { fetchHot } = await server.ssrLoadModule('/api/_lib/reddit.ts');
-      try {
-        const result = await fetchHot('UpliftingNews', 50);
-        check('authenticated fetch returns posts', result.posts.length > 0, `${result.posts.length} posts`);
-        check('running authenticated', result.authenticated === true);
-        check('titles are non-empty', result.posts.every((p) => p.title.trim().length > 0));
+    // Runs either way: with credentials it exercises the JSON API, without them
+    // the public Atom feed. Both must return 50 scoreable posts.
+    const expected = process.env.REDDIT_CLIENT_ID ? 'oauth' : 'rss';
+    console.log(`  ${C.dim}credentials ${process.env.REDDIT_CLIENT_ID ? 'present' : 'absent'} -> expecting the ${expected} path${C.off}`);
 
-        const live = buildAnalysis(analyzePosts(result.posts, 'vader', true));
-        console.log(`  ${C.dim}-> r/UpliftingNews verdict: ${live.verdict.title} (mean ${live.mean.toFixed(3)})${C.off}`);
-      } catch (error) {
-        check('authenticated fetch returns posts', false, error.message);
-        if (error.hint) console.log(`         ${C.dim}${error.hint}${C.off}`);
-      }
+    const { fetchHot } = await server.ssrLoadModule('/api/_lib/reddit.ts');
+    try {
+      const result = await fetchHot('UpliftingNews', 50);
+
+      check('live fetch returns 50 posts', result.posts.length === 50, `${result.posts.length} posts`);
+      check('took the expected path', result.source === expected, result.source);
+      check('titles are non-empty', result.posts.every((p) => p.title.trim().length > 0));
+      check('permalinks resolve to reddit.com',
+        result.posts.every((p) => p.permalink.startsWith('https://www.reddit.com/')));
+      check('post ids are unique', new Set(result.posts.map((p) => p.id)).size === result.posts.length);
+
+      // Vote counts are present on the JSON API and absent on the feed. Either is
+      // valid; silently returning 0 instead of null would not be.
+      const scores = result.posts.map((p) => p.score);
+      check('vote counts match the source',
+        expected === 'oauth'
+          ? scores.every((v) => typeof v === 'number')
+          : scores.every((v) => v === null),
+        expected === 'oauth' ? 'numeric' : 'null (feed omits them)');
+
+      const live = buildAnalysis(analyzePosts(result.posts, 'vader', true));
+      const classified = live.counts.positive + live.counts.neutral + live.counts.negative;
+      check('every live title scored', classified === result.posts.length, `${classified}/${result.posts.length}`);
+      check('correlation matches score availability',
+        live.hasScores ? typeof live.correlation === 'number' : live.correlation === null);
+
+      console.log(`  ${C.dim}-> r/UpliftingNews: ${live.verdict.title} (mean ${live.mean.toFixed(3)}, ` +
+        `${live.counts.positive}+ / ${live.counts.neutral}o / ${live.counts.negative}-)${C.off}`);
+      const top = live.mostPositive[0];
+      if (top) console.log(`  ${C.dim}-> most positive: "${top.title.slice(0, 58)}"${C.off}`);
+    } catch (error) {
+      check('live fetch returns 50 posts', false, error.message);
+      if (error.hint) console.log(`         ${C.dim}${error.hint}${C.off}`);
     }
   } finally {
     await server.close();

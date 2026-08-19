@@ -46,8 +46,11 @@ export interface Analysis {
   drivers: { positive: WordDriver[]; negative: WordDriver[] };
   mostPositive: AnalyzedPost[];
   mostNegative: AnalyzedPost[];
-  /** Spearman rank correlation between sentiment and upvotes. */
-  correlation: number;
+  /** True when the source supplied vote counts (JSON API, not the RSS feed). */
+  hasScores: boolean;
+  /** Spearman rank correlation between sentiment and upvotes, or null when the
+   *  source did not supply vote counts. */
+  correlation: number | null;
   verdict: Verdict;
 }
 
@@ -216,6 +219,9 @@ export function buildAnalysis(posts: AnalyzedPost[]): Analysis {
     negative: counts.negative / total,
   };
 
+  const upvotes = posts.map((post) => post.score);
+  const hasScores = upvotes.every((value): value is number => value !== null);
+
   const byScore = [...posts].sort((a, b) => b.sentiment.score - a.sentiment.score);
   const avg = mean(scores);
   const spread = stdDev(scores);
@@ -231,7 +237,8 @@ export function buildAnalysis(posts: AnalyzedPost[]): Analysis {
     drivers: buildDrivers(posts),
     mostPositive: byScore.filter((p) => p.sentiment.score > 0).slice(0, EXTREME_LIMIT),
     mostNegative: byScore.filter((p) => p.sentiment.score < 0).reverse().slice(0, EXTREME_LIMIT),
-    correlation: spearman(scores, posts.map((p) => p.score)),
+    hasScores,
+    correlation: hasScores ? spearman(scores, upvotes as number[]) : null,
     verdict: buildVerdict(avg, spread),
   };
 }

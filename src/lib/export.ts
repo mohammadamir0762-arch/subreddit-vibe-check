@@ -2,7 +2,8 @@ import type { Analysis } from './analysis';
 import type { Engine } from './sentiment';
 
 /** RFC 4180 quoting — titles routinely contain commas, quotes and newlines. */
-function csvCell(value: string | number): string {
+function csvCell(value: string | number | null): string {
+  if (value === null) return '';
   const text = String(value);
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }

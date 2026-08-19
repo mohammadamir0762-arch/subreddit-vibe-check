@@ -82,9 +82,13 @@ export function VerdictHero({
       </div>
 
       <p className="mt-5 border-t border-edge pt-3 text-xs text-ink-3">
-        {compact(analysis.posts.reduce((sum, p) => sum + p.score, 0))} combined upvotes ·{' '}
-        {compact(analysis.posts.reduce((sum, p) => sum + p.numComments, 0))} comments · fetched{' '}
-        {new Date(fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        {analysis.hasScores && (
+          <>
+            {compact(analysis.posts.reduce((sum, p) => sum + (p.score ?? 0), 0))} combined upvotes ·{' '}
+            {compact(analysis.posts.reduce((sum, p) => sum + (p.numComments ?? 0), 0))} comments ·{' '}
+          </>
+        )}
+        fetched {new Date(fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </p>
     </section>
   );

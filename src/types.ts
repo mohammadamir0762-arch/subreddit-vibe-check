@@ -2,8 +2,10 @@ export interface RedditPost {
   id: string;
   title: string;
   author: string;
-  score: number;
-  numComments: number;
+  /** Null when served from the RSS feed, which omits vote counts. */
+  score: number | null;
+  /** Null when served from the RSS feed, which omits comment counts. */
+  numComments: number | null;
   createdUtc: number;
   permalink: string;
   url: string;
@@ -13,10 +15,14 @@ export interface RedditPost {
   stickied: boolean;
 }
 
+/** Which upstream served a listing: the JSON API, or the public Atom feed. */
+export type PostSource = 'oauth' | 'rss';
+
 export interface HotResponse {
   subreddit: string;
   posts: RedditPost[];
   authenticated: boolean;
+  source: PostSource;
   fetchedAt: string;
 }
 

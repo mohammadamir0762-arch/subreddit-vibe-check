@@ -35,7 +35,9 @@ function Column({
                 >
                   {post.title}
                 </a>
-                <p className="tnum mt-0.5 text-[11px] text-ink-3">{compact(post.score)} upvotes</p>
+                {post.score !== null && (
+                  <p className="tnum mt-0.5 text-[11px] text-ink-3">{compact(post.score)} upvotes</p>
+                )}
               </div>
             </li>
           ))}

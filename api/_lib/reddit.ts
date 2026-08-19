@@ -14,6 +14,8 @@
  * Proxying through the server fixes both, and keeps the OAuth secret off the client.
  */
 
+import { XMLParser } from 'fast-xml-parser';
+
 const TOKEN_URL = 'https://www.reddit.com/api/v1/access_token';
 const OAUTH_BASE = 'https://oauth.reddit.com';
 const PUBLIC_BASE = 'https://www.reddit.com';
@@ -206,8 +208,10 @@ export interface RedditPost {
   id: string;
   title: string;
   author: string;
-  score: number;
-  numComments: number;
+  /** Null on the RSS path — the feed does not expose vote counts. */
+  score: number | null;
+  /** Null on the RSS path — the feed does not expose comment counts. */
+  numComments: number | null;
   createdUtc: number;
   permalink: string;
   url: string;
@@ -244,10 +248,14 @@ function toPost(child: RawChild): RedditPost | null {
   };
 }
 
+export type PostSource = 'oauth' | 'rss';
+
 export interface HotResult {
   subreddit: string;
   posts: RedditPost[];
   authenticated: boolean;
+  /** Which upstream served this listing. Surfaced in the UI. */
+  source: PostSource;
   fetchedAt: string;
 }
 
@@ -256,12 +264,20 @@ export async function fetchHot(rawName: string, limit = 50): Promise<HotResult> 
   const subreddit = assertValidSubreddit(rawName);
   const capped = Math.min(Math.max(Number(limit) || 50, 1), 100);
 
-  const json = (await redditFetch(`/r/${subreddit}/hot`, {
-    limit: String(capped),
-  })) as { data?: { children?: RawChild[] } };
+  // With credentials, the JSON API gives the richest data (votes, comments,
+  // flair). Without them Reddit blocks that API outright, so fall back to the
+  // public Atom feed, which carries the same Hot ranking minus the counts.
+  const source: PostSource = isAuthenticated() ? 'oauth' : 'rss';
 
-  const children = json?.data?.children ?? [];
-  const posts = children.map(toPost).filter((p): p is RedditPost => p !== null);
+  let posts: RedditPost[];
+  if (source === 'oauth') {
+    const json = (await redditFetch(`/r/${subreddit}/hot`, {
+      limit: String(capped),
+    })) as { data?: { children?: RawChild[] } };
+    posts = (json?.data?.children ?? []).map(toPost).filter((p): p is RedditPost => p !== null);
+  } else {
+    posts = await fetchHotViaRss(subreddit, capped);
+  }
 
   if (posts.length === 0) {
     throw new RedditError(404, `r/${subreddit} has no visible posts.`, 'It may be empty, banned, or fully private.');
@@ -271,8 +287,81 @@ export async function fetchHot(rawName: string, limit = 50): Promise<HotResult> 
     subreddit,
     posts: posts.slice(0, capped),
     authenticated: isAuthenticated(),
+    source,
     fetchedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Fetches Hot posts from Reddit's public Atom feed.
+ *
+ * This is the no-credentials path. Reddit blocks anonymous server access to its
+ * JSON API (403 for every User-Agent), but the RSS/Atom feeds for the same
+ * listing are still served — `/r/{sub}/hot.rss` is the same Hot ranking, and
+ * `limit` works, so it returns the same 50 posts in the same order.
+ *
+ * What the feed does NOT carry is vote and comment counts. Rather than invent
+ * them, those fields come back null and the UI drops the features that depend on
+ * them. Titles — which is all the sentiment analysis needs — are complete.
+ */
+async function fetchHotViaRss(subreddit: string, limit: number): Promise<RedditPost[]> {
+  const url = `${PUBLIC_BASE}/r/${subreddit}/hot.rss?limit=${limit}`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': userAgent(), Accept: 'application/atom+xml, application/xml' },
+  });
+
+  if (res.status === 429) {
+    throw new RedditError(429, 'Reddit is rate limiting this feed.', 'Give it a minute and try again.');
+  }
+  if (res.status === 404) {
+    throw new RedditError(404, 'No such subreddit.', 'Check the spelling — it may have been banned or renamed.');
+  }
+  if (!res.ok) {
+    throw new RedditError(
+      res.status === 403 ? 403 : 502,
+      res.status === 403
+        ? 'That subreddit is private, quarantined, or gated.'
+        : `Reddit returned HTTP ${res.status} for the feed.`,
+    );
+  }
+
+  const xml = await res.text();
+  const parsed = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' }).parse(xml) as {
+    feed?: { entry?: unknown };
+  };
+
+  const raw = parsed?.feed?.entry;
+  if (!raw) return [];
+  // A feed with a single entry parses to an object rather than an array.
+  const entries = (Array.isArray(raw) ? raw : [raw]) as Array<Record<string, unknown>>;
+
+  return entries
+    .map((entry): RedditPost | null => {
+      const title = typeof entry.title === 'string' ? entry.title : String(entry.title ?? '');
+      if (!title.trim()) return null;
+
+      const id = typeof entry.id === 'string' ? entry.id.replace(/^t3_/, '') : '';
+      const author = entry.author as { name?: string } | undefined;
+      const link = entry.link as { '@_href'?: string } | undefined;
+      const published = typeof entry.published === 'string' ? entry.published : '';
+
+      return {
+        id: id || title.slice(0, 24),
+        title,
+        author: (author?.name ?? '').replace(/^\/u\//, '') || '[unknown]',
+        score: null,
+        numComments: null,
+        createdUtc: published ? Date.parse(published) / 1000 : 0,
+        permalink: link?.['@_href'] ?? '',
+        url: link?.['@_href'] ?? '',
+        // The feed's <category> is the subreddit itself, not post flair.
+        flair: null,
+        thumbnail: null,
+        over18: false,
+        stickied: false,
+      };
+    })
+    .filter((post): post is RedditPost => post !== null);
 }
 
 export interface SubredditSuggestion {

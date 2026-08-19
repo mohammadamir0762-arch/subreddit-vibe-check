@@ -44,7 +44,7 @@ const FILTERS: Array<{ key: Label | 'all'; name: string }> = [
 ];
 
 /** Every analyzed post, sortable and filterable — the raw evidence behind the charts. */
-export function PostList({ posts }: { posts: AnalyzedPost[] }) {
+export function PostList({ posts, hasScores }: { posts: AnalyzedPost[]; hasScores: boolean }) {
   const [sort, setSort] = useState<SortKey>('hot');
   const [filter, setFilter] = useState<Label | 'all'>('all');
   const [query, setQuery] = useState('');
@@ -64,9 +64,10 @@ export function PostList({ posts }: { posts: AnalyzedPost[] }) {
       hot: (a: typeof filtered[number], b: typeof filtered[number]) => a.rank - b.rank,
       sentiment: (a: typeof filtered[number], b: typeof filtered[number]) =>
         b.post.sentiment.score - a.post.sentiment.score,
-      upvotes: (a: typeof filtered[number], b: typeof filtered[number]) => b.post.score - a.post.score,
+      upvotes: (a: typeof filtered[number], b: typeof filtered[number]) =>
+        (b.post.score ?? 0) - (a.post.score ?? 0),
       comments: (a: typeof filtered[number], b: typeof filtered[number]) =>
-        b.post.numComments - a.post.numComments,
+        (b.post.numComments ?? 0) - (a.post.numComments ?? 0),
     }[sort];
 
     return [...filtered].sort(compare);
@@ -108,7 +109,7 @@ export function PostList({ posts }: { posts: AnalyzedPost[] }) {
           onChange={(event) => setSort(event.target.value as SortKey)}
           className="rounded-lg border border-edge bg-surface px-2.5 py-1.5 text-xs text-ink focus:border-accent focus:outline-none"
         >
-          {SORTS.map((option) => (
+          {SORTS.filter((option) => hasScores || option.key === 'hot' || option.key === 'sentiment').map((option) => (
             <option key={option.key} value={option.key}>Sort: {option.name}</option>
           ))}
         </select>
@@ -134,10 +135,18 @@ export function PostList({ posts }: { posts: AnalyzedPost[] }) {
 
                 <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-3">
                   <span>u/{post.author}</span>
-                  <span aria-hidden>·</span>
-                  <span className="tnum">{compact(post.score)} upvotes</span>
-                  <span aria-hidden>·</span>
-                  <span className="tnum">{compact(post.numComments)} comments</span>
+                  {post.score !== null && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span className="tnum">{compact(post.score)} upvotes</span>
+                    </>
+                  )}
+                  {post.numComments !== null && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span className="tnum">{compact(post.numComments)} comments</span>
+                    </>
+                  )}
                   <span aria-hidden>·</span>
                   <span>{relativeTime(post.createdUtc)}</span>
                   {post.flair && (
