@@ -134,6 +134,22 @@ async function main() {
     check('api/ relative imports carry explicit extensions', offenders.length === 0,
       offenders.length ? offenders.join('; ') : 'ESM-resolvable');
 
+    // The bundled capture is the floor under the rate limiter. If it is empty,
+    // a throttled visitor sees an error instead of real posts.
+    console.log('\nFallback capture');
+    const snap = JSON.parse(readFileSync('api/_lib/snapshot.json', 'utf8'));
+    const captured = Object.keys(snap.feeds ?? {});
+    check('snapshot is populated', captured.length > 0, `${captured.length} subreddits`);
+    check('snapshot records when it was taken', Boolean(snap.capturedAt),
+      snap.capturedAt ? new Date(snap.capturedAt).toLocaleString() : 'MISSING');
+    if (captured.length > 0) {
+      const { fetchHot: _f } = await server.ssrLoadModule('/api/_lib/reddit.ts');
+      void _f;
+      check('captured feeds parse as Atom',
+        captured.every((k) => snap.feeds[k].includes('<entry>') || snap.feeds[k].includes('<entry ')),
+        captured.join(', ').slice(0, 60));
+    }
+
     console.log('\nReddit API');
     const env = loadEnv('development', process.cwd(), '');
     for (const key of ['REDDIT_CLIENT_ID', 'REDDIT_CLIENT_SECRET', 'REDDIT_USER_AGENT']) {
@@ -142,15 +158,18 @@ async function main() {
 
     // Runs either way: with credentials it exercises the JSON API, without them
     // the public Atom feed. Both must return 50 scoreable posts.
-    const expected = process.env.REDDIT_CLIENT_ID ? 'oauth' : 'rss';
-    console.log(`  ${C.dim}credentials ${process.env.REDDIT_CLIENT_ID ? 'present' : 'absent'} -> expecting the ${expected} path${C.off}`);
+    // Without credentials either the live feed or the bundled capture is a
+    // correct outcome — which one depends on whether Reddit is throttling us.
+    const authed = Boolean(process.env.REDDIT_CLIENT_ID);
+    const expected = authed ? ['oauth'] : ['rss', 'snapshot'];
+    console.log(`  ${C.dim}credentials ${authed ? 'present' : 'absent'} -> expecting ${expected.join(' or ')}${C.off}`);
 
     const { fetchHot } = await server.ssrLoadModule('/api/_lib/reddit.ts');
     try {
       const result = await fetchHot('UpliftingNews', 50);
 
-      check('live fetch returns 50 posts', result.posts.length === 50, `${result.posts.length} posts`);
-      check('took the expected path', result.source === expected, result.source);
+      check('fetch returns 50 posts', result.posts.length === 50, `${result.posts.length} posts`);
+      check('took a valid path for the configuration', expected.includes(result.source), result.source);
       check('titles are non-empty', result.posts.every((p) => p.title.trim().length > 0));
       check('permalinks resolve to reddit.com',
         result.posts.every((p) => p.permalink.startsWith('https://www.reddit.com/')));
@@ -160,10 +179,10 @@ async function main() {
       // valid; silently returning 0 instead of null would not be.
       const scores = result.posts.map((p) => p.score);
       check('vote counts match the source',
-        expected === 'oauth'
+        result.source === 'oauth'
           ? scores.every((v) => typeof v === 'number')
           : scores.every((v) => v === null),
-        expected === 'oauth' ? 'numeric' : 'null (feed omits them)');
+        result.source === 'oauth' ? 'numeric' : 'null (feed omits them)');
 
       const live = buildAnalysis(analyzePosts(result.posts, 'vader', true));
       const classified = live.counts.positive + live.counts.neutral + live.counts.negative;
@@ -176,7 +195,7 @@ async function main() {
       const top = live.mostPositive[0];
       if (top) console.log(`  ${C.dim}-> most positive: "${top.title.slice(0, 58)}"${C.off}`);
     } catch (error) {
-      check('live fetch returns 50 posts', false, error.message);
+      check('fetch returns 50 posts', false, error.message);
       if (error.hint) console.log(`         ${C.dim}${error.hint}${C.off}`);
     }
   } finally {

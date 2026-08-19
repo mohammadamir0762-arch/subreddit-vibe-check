@@ -42,9 +42,14 @@ export async function hotRoute(params: URLSearchParams): Promise<RouteResult> {
     return {
       status: 200,
       body: result,
-      // Hot listings churn slowly. Serving a shared edge copy for 5 minutes keeps
-      // us well clear of Reddit's rate limit when several people load at once.
-      cacheControl: 'public, s-maxage=300, stale-while-revalidate=600',
+      // Hot listings churn slowly, so a shared edge copy keeps us well clear of
+      // Reddit's rate limit when several people load at once. A snapshot response
+      // gets a much shorter TTL, so the edge goes back for live data soon rather
+      // than pinning a fallback in place for five minutes.
+      cacheControl:
+        result.source === 'snapshot'
+          ? 'public, s-maxage=45, stale-while-revalidate=120'
+          : 'public, s-maxage=300, stale-while-revalidate=600',
     };
   } catch (error) {
     return toErrorResult(error);

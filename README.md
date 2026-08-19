@@ -13,12 +13,12 @@ actually tracks with upvotes.
 
 ```bash
 npm install
-cp .env.example .env      # then fill in the two Reddit values (see below)
 npm run dev               # http://localhost:5173
-npm run verify            # self-check: sentiment pipeline + live Reddit call
+npm run verify            # self-check: sentiment pipeline + a live Reddit fetch
 ```
 
-Reddit credentials are **required**, not optional — see the next section for why.
+**No credentials are required to run this.** Adding them unlocks vote counts —
+see [Data sources](#data-sources) for exactly what changes.
 
 ---
 
@@ -43,7 +43,7 @@ route functions in [`api/_lib/handlers.ts`](api/_lib/handlers.ts), so local and
 production run identical code — "works locally, 500s in prod" can't happen. It
 also keeps the OAuth secret off the client.
 
-### 2. Anonymous server requests are blocked outright
+### 2. Anonymous access to the JSON API is blocked outright
 
 The old advice — "just append `.json` to any Reddit URL" — no longer works from a
 server. Verified while building this:
@@ -53,18 +53,70 @@ $ curl -o /dev/null -w "%{http_code}" https://www.reddit.com/r/UpliftingNews/hot
 403
 ```
 
-…and it returns a 403 **for every User-Agent**, including browser-like ones. The
+…and it returns 403 **for every User-Agent**, including browser-like ones. The
 response body is an HTML block page, not JSON.
 
-The app therefore authenticates with Reddit's app-only OAuth flow. Without
-credentials it fails fast with setup instructions rather than surfacing a
-confusing 403 about the subreddit.
+But Reddit still serves the **Atom feed** for the same listing, unauthenticated:
+
+```
+$ curl -o /dev/null -w "%{http_code}" https://www.reddit.com/r/UpliftingNews/hot.rss?limit=50
+200
+```
+
+`/r/{sub}/hot.rss` is the same Hot ranking, in the same order, and honours
+`limit` — so it returns the same 50 posts. That is what makes this app work
+without credentials at all.
 
 [forbidden]: https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_header_name
 
 ---
 
-## Getting Reddit API credentials
+## Data sources
+
+`fetchHot` picks the best available source and tells the UI which one it used, so
+the interface can state plainly where the numbers came from.
+
+| Source | When | Gives | Missing |
+|---|---|---|---|
+| **JSON API** (`oauth`) | Credentials configured | Everything: titles, votes, comments, flair | — |
+| **Atom feed** (`rss`) | No credentials — the default | Titles, authors, permalinks, timestamps | Vote and comment counts |
+| **Bundled capture** (`snapshot`) | Live feed is rate-limited | Real posts captured earlier, labelled with their capture time | Vote counts; not current |
+
+Two design rules follow from this:
+
+**Missing data is `null`, never `0`.** The feed does not expose vote counts, so
+`score` comes back `null` and the UI *removes* what depends on it — the
+sentiment-vs-upvotes scatter disappears, and the sort options that need it are
+withdrawn. Substituting zeros would have produced a chart that looked fine and
+meant nothing.
+
+**A fallback always says it is one.** A snapshot response carries its capture
+timestamp and the UI names it as a saved capture, so a reader is never shown
+stale data dressed as live.
+
+### On rate limiting
+
+The public feed allows only a few requests a minute per IP — enough for one
+person browsing, but a visitor clicking through the presets will trip it. Four
+mitigations, in order of how early they catch it:
+
+1. An **instance-level cache** (3 min) so a warm function never re-asks Reddit.
+2. **Retry with backoff**, falling back to `old.reddit.com`, which limits separately.
+3. A **stale cached feed** in preference to an error.
+4. The **bundled capture** as the floor, refreshable with `npm run snapshot`.
+
+Edge caching sits in front of all of it: successful listings are held for 5
+minutes (`s-maxage=300`), snapshots for only 45 seconds so the edge returns to
+live data quickly.
+
+---
+
+## Getting Reddit API credentials (optional)
+
+Credentials are not needed to run the app — the Atom feed covers the brief's
+requirement on its own. Adding them upgrades the data source to the JSON API,
+which restores vote counts, comment counts, post flair, and the
+sentiment-vs-upvotes correlation.
 
 1. Sign in to Reddit and open <https://www.reddit.com/prefs/apps>.
 2. **Create another app…** and fill in:
@@ -84,7 +136,7 @@ REDDIT_USER_AGENT=web:subreddit-vibe-check:1.0.0 (by /u/your_username)
 ```
 
 Set the same three variables in Vercel under **Settings → Environment Variables**.
-`npm run verify` will tell you whether they work.
+`npm run verify` reports which path it took and whether it worked.
 
 ---
 
@@ -163,7 +215,8 @@ OS setting and an explicit toggle.
 
 ```
 api/
-  _lib/reddit.ts      Reddit client — OAuth, token cache, validation, error mapping
+  _lib/reddit.ts      Reddit client — source selection, OAuth, feed parsing, retries
+  _lib/snapshot.json  Bundled fallback capture (npm run snapshot)
   _lib/handlers.ts    Transport-agnostic route logic (shared by prod + dev)
   hot.ts, search.ts   Vercel serverless entry points
 vite-plugins/
@@ -173,6 +226,7 @@ src/
   lib/analysis.ts     Aggregation: histogram, drivers, Spearman, verdict
   components/         Hand-rolled SVG charts + UI
 scripts/verify.mjs    Self-check over the real modules
+scripts/capture-snapshot.mjs  Builds the fallback capture
 ```
 
 ## Scripts
@@ -182,6 +236,7 @@ scripts/verify.mjs    Self-check over the real modules
 | `npm run dev` | Dev server with the API routes mounted |
 | `npm run build` | Typecheck + production build |
 | `npm run verify` | Sentiment fixtures, aggregation invariants, live Reddit call |
+| `npm run snapshot` | Refresh the bundled fallback capture of the preset subreddits |
 | `npm run typecheck` | Types only |
 | `npm run lint` | oxlint |
 

@@ -16,13 +16,15 @@ export interface RedditPost {
 }
 
 /** Which upstream served a listing: the JSON API, or the public Atom feed. */
-export type PostSource = 'oauth' | 'rss';
+export type PostSource = 'oauth' | 'rss' | 'snapshot';
 
 export interface HotResponse {
   subreddit: string;
   posts: RedditPost[];
   authenticated: boolean;
   source: PostSource;
+  /** When the bundled capture was taken. Null unless source is 'snapshot'. */
+  capturedAt: string | null;
   fetchedAt: string;
 }
 

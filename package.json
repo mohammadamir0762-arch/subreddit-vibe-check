@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "snapshot": "node scripts/capture-snapshot.mjs"
   },
   "dependencies": {
     "fast-xml-parser": "^5.11.0",

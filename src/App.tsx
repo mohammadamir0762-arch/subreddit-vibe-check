@@ -131,6 +131,16 @@ export default function App() {
       <main className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6 sm:py-8">
         <SubredditSearch onSubmit={load} loading={loading} initial={subredditFromUrl()} />
 
+        {data?.source === 'snapshot' && (
+          <p className="rounded-lg border border-edge bg-sunken px-3 py-2 text-xs leading-relaxed text-ink-2">
+            <span className="font-medium text-ink">Showing a saved capture, not live posts.</span>{' '}
+            Reddit rate-limits its public feed to a few requests a minute, and that limit was hit just
+            now — so these are real posts from r/{data.subreddit}, captured{' '}
+            {data.capturedAt ? new Date(data.capturedAt).toLocaleString() : 'earlier'}. Wait about
+            30 seconds and search again for live results.
+          </p>
+        )}
+
         {data?.source === 'rss' && (
           <p className="rounded-lg border border-edge bg-sunken px-3 py-2 text-xs leading-relaxed text-ink-2">
             <span className="font-medium text-ink">Live data via Reddit's public Atom feed.</span>{' '}

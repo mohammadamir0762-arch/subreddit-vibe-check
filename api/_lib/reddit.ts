@@ -15,6 +15,7 @@
  */
 
 import { XMLParser } from 'fast-xml-parser';
+import snapshot from './snapshot.json' with { type: 'json' };
 
 const TOKEN_URL = 'https://www.reddit.com/api/v1/access_token';
 const OAUTH_BASE = 'https://oauth.reddit.com';
@@ -248,7 +249,7 @@ function toPost(child: RawChild): RedditPost | null {
   };
 }
 
-export type PostSource = 'oauth' | 'rss';
+export type PostSource = 'oauth' | 'rss' | 'snapshot';
 
 export interface HotResult {
   subreddit: string;
@@ -256,6 +257,8 @@ export interface HotResult {
   authenticated: boolean;
   /** Which upstream served this listing. Surfaced in the UI. */
   source: PostSource;
+  /** When a snapshot was captured. Null unless source is 'snapshot'. */
+  capturedAt: string | null;
   fetchedAt: string;
 }
 
@@ -267,7 +270,8 @@ export async function fetchHot(rawName: string, limit = 50): Promise<HotResult> 
   // With credentials, the JSON API gives the richest data (votes, comments,
   // flair). Without them Reddit blocks that API outright, so fall back to the
   // public Atom feed, which carries the same Hot ranking minus the counts.
-  const source: PostSource = isAuthenticated() ? 'oauth' : 'rss';
+  let source: PostSource = isAuthenticated() ? 'oauth' : 'rss';
+  let capturedAt: string | null = null;
 
   let posts: RedditPost[];
   if (source === 'oauth') {
@@ -276,7 +280,13 @@ export async function fetchHot(rawName: string, limit = 50): Promise<HotResult> 
     })) as { data?: { children?: RawChild[] } };
     posts = (json?.data?.children ?? []).map(toPost).filter((p): p is RedditPost => p !== null);
   } else {
-    posts = await fetchHotViaRss(subreddit, capped);
+    const feed = await fetchHotViaRss(subreddit, capped);
+    posts = feed.posts;
+    if (feed.capturedAt) {
+      // Live fetch was throttled and the bundled capture served instead.
+      source = 'snapshot';
+      capturedAt = feed.capturedAt;
+    }
   }
 
   if (posts.length === 0) {
@@ -288,6 +298,7 @@ export async function fetchHot(rawName: string, limit = 50): Promise<HotResult> 
     posts: posts.slice(0, capped),
     authenticated: isAuthenticated(),
     source,
+    capturedAt,
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -341,7 +352,23 @@ async function requestFeed(subreddit: string, limit: number): Promise<Response> 
   return last as Response;
 }
 
-async function fetchHotViaRss(subreddit: string, limit: number): Promise<RedditPost[]> {
+interface Snapshot {
+  capturedAt: string | null;
+  feeds: Record<string, string>;
+}
+
+/** The bundled fallback feed for a subreddit, if one was captured. */
+function snapshotFeed(subreddit: string): { xml: string; capturedAt: string | null } | null {
+  const store = snapshot as Snapshot;
+  const xml = store.feeds?.[subreddit.toLowerCase()];
+  return xml ? { xml, capturedAt: store.capturedAt } : null;
+}
+
+async function fetchHotViaRss(
+  subreddit: string,
+  limit: number,
+): Promise<{ posts: RedditPost[]; capturedAt: string | null }> {
+  let usedSnapshot: string | null = null;
   const key = `${subreddit}:${limit}`;
   const cached = feedCache.get(key);
 
@@ -356,11 +383,17 @@ async function fetchHotViaRss(subreddit: string, limit: number): Promise<RedditP
       if (cached) {
         xml = cached.xml;
       } else {
-        throw new RedditError(
-          429,
-          'Reddit is rate limiting the public feed.',
-          'This feed allows only a few requests a minute. Wait about 30 seconds and try again.',
-        );
+        const fallback = snapshotFeed(subreddit);
+        if (!fallback) {
+          throw new RedditError(
+            429,
+            'Reddit is rate limiting the public feed.',
+            'This feed allows only a few requests a minute. Wait about 30 seconds and try again.',
+          );
+        }
+        // Signals to the caller that this listing came from the bundled capture.
+        usedSnapshot = fallback.capturedAt ?? 'unknown';
+        xml = fallback.xml;
       }
     } else if (res.status === 404) {
       throw new RedditError(404, 'No such subreddit.', 'Check the spelling — it may have been banned or renamed.');
@@ -382,11 +415,11 @@ async function fetchHotViaRss(subreddit: string, limit: number): Promise<RedditP
   };
 
   const raw = parsed?.feed?.entry;
-  if (!raw) return [];
+  if (!raw) return { posts: [], capturedAt: usedSnapshot };
   // A feed with a single entry parses to an object rather than an array.
   const entries = (Array.isArray(raw) ? raw : [raw]) as Array<Record<string, unknown>>;
 
-  return entries
+  const posts = entries
     .map((entry): RedditPost | null => {
       const title = typeof entry.title === 'string' ? entry.title : String(entry.title ?? '');
       if (!title.trim()) return null;
@@ -413,6 +446,8 @@ async function fetchHotViaRss(subreddit: string, limit: number): Promise<RedditP
       };
     })
     .filter((post): post is RedditPost => post !== null);
+
+  return { posts, capturedAt: usedSnapshot };
 }
 
 export interface SubredditSuggestion {
